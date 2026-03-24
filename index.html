@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bluesky CAR Post Extractor</title>
+    <meta
+      name="description"
+      content="Bluesky のエクスポート .car から投稿時刻と本文だけを JSON / CSV へ抽出する、ブラウザ完結の静的サイトです。"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">Browser-only utility for Bluesky exports</p>
+        <h1>Bluesky CAR Post Extractor</h1>
+        <p class="hero-copy">
+          `.car` をブラウザで直接展開し、`createdAt` と `text` だけを含む JSON / CSV を生成します。
+          ファイルはアップロードされず、このページの中だけで処理されます。
+        </p>
+      </header>
+
+      <main class="layout">
+        <section class="panel guide-panel">
+          <div class="section-head">
+            <p class="section-kicker">Step 0</p>
+            <h2>Bluesky アプリで `.car` を取得</h2>
+          </div>
+
+          <p class="panel-note">
+            2026-03-24 時点で確認できた Bluesky の現行 UI 文言ベースでは、`Settings` →
+            `Account` → `Export my data` → `Download CAR file` の順です。
+          </p>
+
+          <ol class="guide-steps">
+            <li>Bluesky アプリまたは Bluesky Web を開いて `Settings` を開く。</li>
+            <li>`Account` を開く。</li>
+            <li>`Export my data` を選ぶ。</li>
+            <li>`Download CAR file` を押して `repo.car` を保存する。</li>
+            <li>保存した `.car` をこのページに戻ってアップロードする。</li>
+          </ol>
+
+          <p class="guide-note">
+            Bluesky の説明では、この CAR には公開データの記録が含まれますが、画像などの media
+            embeds や private data は含まれません。
+          </p>
+
+          <div class="guide-links">
+            <a href="https://docs.bsky.app/blog/repo-export" target="_blank" rel="noreferrer">
+              Official blog: repo export
+            </a>
+            <a
+              href="https://docs.bsky.app/docs/api/com-atproto-sync-get-repo"
+              target="_blank"
+              rel="noreferrer">
+              API: com.atproto.sync.getRepo
+            </a>
+            <a
+              href="https://github.com/bluesky-social/social-app/blob/main/src/screens/Settings/AccountSettings.tsx"
+              target="_blank"
+              rel="noreferrer">
+              App source: AccountSettings
+            </a>
+            <a
+              href="https://github.com/bluesky-social/social-app/blob/main/src/screens/Settings/components/ExportCarDialog.tsx"
+              target="_blank"
+              rel="noreferrer">
+              App source: ExportCarDialog
+            </a>
+          </div>
+        </section>
+
+        <section class="panel uploader-panel">
+          <div class="section-head">
+            <p class="section-kicker">Step 1</p>
+            <h2>CAR ファイルを選択</h2>
+          </div>
+
+          <label class="dropzone" id="dropzone" for="car-file">
+            <input id="car-file" name="car-file" type="file" accept=".car,application/octet-stream" />
+            <span class="dropzone-title">ここへ `.car` をドラッグするか、クリックして選択</span>
+            <span class="dropzone-meta" id="selected-file">未選択</span>
+          </label>
+
+          <div class="actions">
+            <button class="primary-button" id="extract-button" type="button" disabled>JSON / CSV を抽出</button>
+            <span class="status-pill" id="runtime-status">WASM を読み込み中...</span>
+          </div>
+
+          <p class="panel-note">
+            対象は Bluesky export の repo `.car` を想定しています。出力 JSON は投稿レコードのみを対象にします。
+          </p>
+        </section>
+
+        <section class="panel results-panel" id="results-panel" hidden>
+          <div class="section-head">
+            <p class="section-kicker">Step 2</p>
+            <h2>抽出結果</h2>
+          </div>
+
+          <div class="stats-grid">
+            <article class="stat-card">
+              <span class="stat-label">DID</span>
+              <strong class="stat-value" id="did-value">-</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">投稿数</span>
+              <strong class="stat-value" id="post-count">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">最初の時刻</span>
+              <strong class="stat-value" id="range-start">-</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">最後の時刻</span>
+              <strong class="stat-value" id="range-end">-</strong>
+            </article>
+          </div>
+
+          <div class="actions">
+            <a class="primary-button" id="download-json-link" download>JSON をダウンロード</a>
+            <a class="secondary-button" id="download-csv-link" download>CSV をダウンロード</a>
+            <span class="panel-note" id="download-name">ダウンロードファイルはまだ生成されていません。</span>
+          </div>
+
+          <div class="preview-header">
+            <h3>プレビュー</h3>
+            <p>先頭 24 件だけ表示しています。</p>
+          </div>
+          <div class="preview-list" id="preview-list"></div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <p>
+          This app includes code adapted from Bluesky's indigo project and is distributed under
+          MIT or Apache-2.0 terms.
+        </p>
+        <div class="footer-links">
+          <a href="./NOTICE.md">Notices</a>
+          <a href="./LICENSE-MIT">MIT</a>
+          <a href="./LICENSE-APACHE">Apache-2.0</a>
+        </div>
+      </footer>
+    </div>
+
+    <script src="./wasm_exec.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
